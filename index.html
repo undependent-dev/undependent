@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Undependent — Be Undependent. Own Your Code.</title>
+  <meta name="description" content="Eliminate supply chain risk by absorbing third-party dependencies into your codebase."/>
+  <link rel="stylesheet" href="css/main.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a href="#" class="logo">
+        <span class="logo-icon">&#x2B21;</span>
+        undependent
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how">How It Works</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#compare">Compare</a>
+        <a href="https://github.com/undependent-dev/undependent" target="_blank">GitHub</a>
+        <a href="#scan" class="btn btn-sm">Free Scan</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="container hero-inner">
+      <div class="hero-badge">v1.0.0 — Now Available</div>
+      <h1>Be <span class="accent">Undependent</span>.<br/>Own Your Code.</h1>
+      <p class="hero-sub">Eliminate supply chain risk by absorbing third-party dependencies into your codebase. No external registries. No upstream compromise possible.</p>
+      <div class="hero-actions">
+        <a href="#scan" class="btn btn-lg">Scan Your Repo — Free</a>
+        <a href="#how" class="btn btn-lg btn-ghost">See How It Works</a>
+      </div>
+      <div class="hero-terminal">
+        <div class="terminal-bar">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          <span class="terminal-title">~/your-project</span>
+          <button id="reset-terminal" class="terminal-reset" title="Replay animation">&#x21bb;</button>
+        </div>
+        <pre><code id="terminal-output"></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="logos">
+    <div class="container">
+      <p>Supply chain attacks that Undependent prevents</p>
+      <div class="logo-grid">
+        <span class="logo-item">xz backdoor</span>
+        <span class="logo-item">Event Stream</span>
+        <span class="logo-item">ua-parser-js</span>
+        <span class="logo-item">left-pad</span>
+        <span class="logo-item">dependency confusion</span>
+        <span class="logo-item">typosquatting</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="social-proof">
+    <div class="container">
+      <p class="social-proof-label">Trusted by engineering teams shipping secure code</p>
+      <div class="social-proof-grid">
+        <div class="proof-stat">
+          <div class="proof-number" data-count="847">0</div>
+          <div class="proof-label">Repos Scanned</div>
+        </div>
+        <div class="proof-stat">
+          <div class="proof-number" data-count="12453">0</div>
+          <div class="proof-label">Vulnerabilities Found</div>
+        </div>
+        <div class="proof-stat">
+          <div class="proof-number" data-count="342">0</div>
+          <div class="proof-label">Reports Delivered</div>
+        </div>
+        <div class="proof-stat">
+          <div class="proof-number" data-count="99">0</div>
+          <div class="proof-label">% Uptime</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="features">
+    <div class="container">
+      <div class="section-header">
+        <h2>Why Undependent</h2>
+        <p>Other tools detect risk. Undependent eliminates it.</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></div>
+          <h3>Dependency Sovereignty</h3>
+          <p>Absorb dependencies into your codebase. You own the code. No more trusting external registries that can be compromised, nuked, or license-changed.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L4 6v6c0 5 3.5 9.7 8 11 4.5-1.3 8-6 8-11V6L12 2z"/></svg></div>
+          <h3>Lockfile Integrity</h3>
+          <p>SHA256 hashes of every inlined file. Detect tampering immediately. If a file drifts, you know before it ships.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L4 6v6c0 5 3.5 9.7 8 11 4.5-1.3 8-6 8-11V6L12 2z"/><path d="M12 8v4M12 16v1"/></svg></div>
+          <h3>CVE Scanning</h3>
+          <p>OSV API integration for real-time vulnerability detection. Scan on every push, daily cron, or on-demand.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+          <h3>Attack Surface Mapping</h3>
+          <p>See exactly which YOUR files import inlined dependencies. Know your blast radius before an incident happens.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></div>
+          <h3>License Compliance</h3>
+          <p>Auto-detect project license. Check every dependency for compatibility. Generate SBOM + SPDX for audits.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z"/></svg></div>
+          <h3>Multi-Language</h3>
+          <p>Go, Python, JavaScript/TypeScript, Rust. One tool for your entire stack.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how" class="how">
+    <div class="container">
+      <div class="section-header">
+        <h2>How It Works</h2>
+        <p>Four steps to supply chain sovereignty</p>
+      </div>
+      <div class="steps">
+        <div class="step" id="step1">
+          <div class="step-number">1</div>
+          <h3>Analyze</h3>
+          <p>Scan your codebase to identify every third-party dependency and which of YOUR files actually use them.</p>
+          <code>undep analyze</code>
+        </div>
+        <div class="step" id="step2">
+          <div class="step-number">2</div>
+          <h3>Absorb</h3>
+          <p>Inline the dependencies you need directly into your codebase. Create a lockfile with SHA256 hashes of every file.</p>
+          <code>undep inline --pr</code>
+        </div>
+        <div class="step" id="step3">
+          <div class="step-number">3</div>
+          <h3>Verify</h3>
+          <p>Validate your build, check file integrity against hashes, scan for CVEs, and verify license compliance.</p>
+          <code>undep verify</code>
+        </div>
+        <div class="step" id="step4">
+          <div class="step-number">4</div>
+          <h3>Automate</h3>
+          <p>Integrate into CI/CD. Every PR checks integrity. Every push scans for new CVEs. Every release generates compliance artifacts.</p>
+          <code>undep diff && undep verify</code>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <section id="scan" class="scan-section">
+    <div class="container">
+      <div class="scan-box">
+        <h2>Try It Free — No Account Needed</h2>
+        <p>Run <code style="display:inline;padding:2px 8px;background:var(--bg);border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--accent);border:1px solid var(--border);">undep analyze</code> on your repo. See your supply chain risk in seconds.</p>
+        <form id="scan-form">
+          <input type="text" id="repo-url" placeholder="https://github.com/your/repo.git" required/>
+          <input type="email" id="email" placeholder="your@email.com (optional — for report delivery)"/>
+          <button type="submit" class="btn btn-lg">Analyze My Repo</button>
+        </form>
+        <div id="scan-result"></div>
+        <p style="margin-top:20px;font-size:12px;color:var(--text-dim);">Free forever with AGPL license. <a href="#pricing" style="color:var(--accent);text-decoration:none;">Commercial licenses available</a> for companies.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing" class="pricing">
+    <div class="container">
+      <div class="section-header">
+        <h2>Pricing</h2>
+        <p>The tool is free. Pay only when your company needs to.</p>
+      </div>
+      <div class="pricing-grid pricing-grid-3">
+        <!-- 1. COMMUNITY (FREE) -->
+        <div class="price-card">
+          <h3>Community</h3>
+          <div class="price">$0<span style="font-size:16px;color:var(--text-muted);font-weight:500">/forever</span></div>
+          <p class="price-desc">AGPL licensed. The full CLI, unlimited everything. No account needed.</p>
+          <ul>
+            <li><span class="check">&#x2713;</span> Full CLI: analyze, inline, verify</li>
+            <li><span class="check">&#x2713;</span> Unlimited repos &amp; users</li>
+            <li><span class="check">&#x2713;</span> Self-hosted, no cloud</li>
+            <li><span class="check">&#x2713;</span> CVE scanning</li>
+            <li><span class="check">&#x2713;</span> Community support</li>
+          </ul>
+          <a href="https://github.com/undependent-dev/undependent" target="_blank" class="btn btn-block btn-ghost">Get Started</a>
+        </div>
+        <!-- 2. SINGLE SCAN ($99) -->
+        <div class="price-card">
+          <h3>Single Scan</h3>
+          <div class="price">$99<span style="font-size:16px;color:var(--text-muted);font-weight:500">/repo</span></div>
+          <p class="price-desc">One-time cloud scan. Full PDF report with CVEs, licenses, risk score, and SBOM export.</p>
+          <ul>
+            <li><span class="check">&#x2713;</span> Full analysis report</li>
+            <li><span class="check">&#x2713;</span> SBOM + SPDX export</li>
+            <li><span class="check">&#x2713;</span> Remediation roadmap</li>
+            <li><span class="check">&#x2713;</span> Delivered in 24 hours</li>
+            <li><span class="check">&#x2713;</span> No subscription required</li>
+          </ul>
+          <button class="btn btn-block btn-ghost">Scan a Repo</button>
+        </div>
+        <!-- 3. COMMERCIAL ($299/yr) -->
+        <div class="price-card featured">
+          <h3>Commercial</h3>
+          <div class="price">$299<span style="font-size:16px;color:var(--text-muted);font-weight:500">/yr</span></div>
+          <p class="price-desc">Same CLI, commercial license. No AGPL viral terms. Use internally without open-sourcing.</p>
+          <ul>
+            <li><span class="check">&#x2713;</span> Everything in Community</li>
+            <li><span class="check">&#x2713;</span> Commercial license</li>
+            <li><span class="check">&#x2713;</span> Email support</li>
+            <li><span class="check">&#x2713;</span> Priority bug fixes</li>
+            <li><span class="check">&#x2713;</span> Unlimited users &amp; repos</li>
+          </ul>
+          <button class="btn btn-block btn-accent">Get License</button>
+        </div>
+      </div>
+      <!-- ADD-ONS ROW (no prices, build appetite) -->
+      <div class="addons-section">
+        <h3 style="text-align:center;font-size:18px;color:var(--text);margin-bottom:28px;font-weight:600;">Additional Services</h3>
+        <div class="addons-row">
+          <a href="#contact" class="addon-pill">
+            <svg class="addon-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1"/></svg>
+            <span class="addon-label">Monitoring</span>
+          </a>
+          <a href="#contact" class="addon-pill">
+            <svg class="addon-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2L3 5v4c0 3 2.2 5.7 5 6.5 2.8-.8 5-3.5 5-6.5V5L8 2z"/></svg>
+            <span class="addon-label">GitHub App</span>
+          </a>
+          <a href="#contact" class="addon-pill">
+            <svg class="addon-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M2 6h12M6 6v8"/></svg>
+            <span class="addon-label">Compliance Dashboard</span>
+          </a>
+          <a href="#contact" class="addon-pill">
+            <svg class="addon-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8l3 3 7-7"/></svg>
+            <span class="addon-label">Air-Gapped Solutions</span>
+          </a>
+        </div>
+        <p class="addons-subtext">Custom pricing based on your needs. <a href="mailto:sales@undependent.dev" style="color:var(--accent);text-decoration:none;">Talk to us</a>.</p>
+      </div>
+      <div class="pricing-note">
+        <p><strong>Your code, your rules.</strong> Absorb dependencies into your codebase. Eliminate supply chain risk at the source — not just detect it. Start free, upgrade when your company needs to.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="compare" class="compare">
+    <div class="container">
+      <div class="section-header">
+        <h2>Undependent vs Alternatives</h2>
+        <p>The only tool that actually solves supply chain risk</p>
+      </div>
+      <div class="compare-table">
+        <table>
+          <thead>
+          <tr>
+            <th>Feature</th>
+            <th class="highlight">Undependent</th>
+            <th>Snyk</th>
+            <th>Dependabot</th>
+            <th>Socket</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr>
+            <td>Eliminates risk</td>
+            <td class="highlight yes">&#x2713;</td>
+            <td class="no">&#x2717;</td>
+            <td class="no">&#x2717;</td>
+            <td class="no">&#x2717;</td>
+          </tr>
+          <tr>
+            <td>Passive detection only</td>
+            <td class="highlight no">&#x2717;</td>
+            <td class="yes">&#x2713;</td>
+            <td class="yes">&#x2713;</td>
+            <td class="yes">&#x2713;</td>
+          </tr>
+          <tr>
+            <td>Lockfile integrity</td>
+            <td class="highlight yes">&#x2713;</td>
+            <td class="no">&#x2717;</td>
+            <td class="no">&#x2717;</td>
+            <td class="no">&#x2717;</td>
+          </tr>
+          <tr>
+            <td>Attack surface mapping</td>
+            <td class="highlight yes">&#x2713;</td>
+            <td class="no">&#x2717;</td>
+            <td class="no">&#x2717;</td>
+            <td class="no">&#x2717;</td>
+          </tr>
+          <tr>
+            <td>SBOM + SPDX</td>
+            <td class="highlight yes">&#x2713;</td>
+            <td class="yes">&#x2713;</td>
+            <td class="no">&#x2717;</td>
+            <td class="no">&#x2717;</td>
+          </tr>
+          <tr>
+            <td>License compliance</td>
+            <td class="highlight yes">&#x2713;</td>
+            <td class="yes">&#x2713;</td>
+            <td class="no">&#x2717;</td>
+            <td class="no">&#x2717;</td>
+          </tr>
+          <tr>
+            <td>Multi-language</td>
+            <td class="highlight yes">&#x2713;</td>
+            <td class="yes">&#x2713;</td>
+            <td class="yes">&#x2713;</td>
+            <td class="yes">&#x2713;</td>
+          </tr>
+          <tr>
+            <td>Price</td>
+            <td class="highlight">Free (AGPL) / $299/yr commercial</td>
+            <td>$29/user/mo ($348+/yr per user)</td>
+            <td>Free (GitHub Free) / $4/user/mo</td>
+            <td>$500+/mo (per team)</td>
+          </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section">
+    <div class="container">
+      <h2>Ready to be Undependent?</h2>
+      <p>Join the supply chain sovereignty movement. Your code, your rules.</p>
+      <div class="cta-actions">
+        <a href="#scan" class="btn btn-lg">Scan Your Repo — Free</a>
+        <a href="https://github.com/undependent-dev/undependent" target="_blank" class="btn btn-lg btn-ghost">View on GitHub</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container footer-inner">
+      <div class="footer-col">
+        <div class="logo">
+          <span class="logo-icon">&#x2B21;</span>
+          undependent
+        </div>
+        <p>Dependency Sovereignty Tool</p>
+        <p>Be Undependent. Own Your Code.</p>
+        <div class="status-badge">
+          <span class="status-dot"></span>
+          <span>All systems operational</span>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#compare">Compare</a>
+        <a href="https://github.com/undependent-dev/undependent">GitHub</a>
+      </div>
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <a href="#">Documentation</a>
+        <a href="#">API Reference</a>
+        <a href="#">Changelog</a>
+        <a href="#">Security Policy</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="#">AGPL v3 License</a>
+        <a href="#">Commercial License</a>
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+      </div>
+    </div>
+    <div class="container footer-bottom">
+      <p>&#169; 2026 Undependent. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <canvas id="particle-canvas"></canvas>
+</body>
+</html>

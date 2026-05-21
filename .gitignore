@@ -1,0 +1,10 @@
+# Bytecode
+__pycache__/
+*.pyc
+
+# Editor
+.DS_Store
+*.swp
+
+# Backup files
+*.bak
