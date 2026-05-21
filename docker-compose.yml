@@ -1,0 +1,34 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: undependent-app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_PATH=/app/data/undependent.db
+      - SERVER_PORT=8080
+    volumes:
+      - undependent-data:/app/data
+
+  nginx:
+    image: nginx:alpine
+    container_name: undependent-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docs:/usr/share/nginx/html:ro
+      - ./ssl/certs:/etc/ssl/certs:ro
+      - ./ssl/private:/etc/ssl/private:ro
+    depends_on:
+      - app
+
+volumes:
+  undependent-data:

@@ -1,0 +1,95 @@
+# Undependent Supply Chain Security Scan
+# Add this file to .github/workflows/ to run automated dependency security scans
+#
+# Setup:
+#   1. Generate an API key at https://undependent.dev/api-keys
+#   2. Add it as a GitHub secret: UNDEPENDENT_API_KEY
+#   3. Commit this workflow file
+#
+# Pricing: $0.50 per scan
+
+name: Undependent Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run daily at midnight UTC
+    - cron: '0 0 * * *'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check scan prerequisites
+        run: |
+          if [ -z "$UNDEPENDENT_API_KEY" ]; then
+            echo "::warning::UNDEPENDENT_API_KEY not configured — skipping scan"
+            exit 0
+          fi
+        env:
+          UNDEPENDENT_API_KEY: ${{ secrets.UNDEPENDENT_API_KEY }}
+
+      - name: Run Undependent scan
+        env:
+          UNDEPENDENT_API_KEY: ${{ secrets.UNDEPENDENT_API_KEY }}
+          REPO_URL: ${{ github.event.repository.html_url }}
+        run: |
+          # Submit scan to Undependent API
+          RESPONSE=$(curl -s -X POST https://undependent.dev/api/v1/scan \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: $UNDEPENDENT_API_KEY" \
+            -d "{\"repo_url\": \"$REPO_URL\"}")
+
+          SCAN_ID=$(echo "$RESPONSE" | jq -r '.id')
+          echo "Scan ID: $SCAN_ID"
+
+          # Poll for completion (max 5 minutes)
+          for i in $(seq 1 60); do
+            sleep 5
+            STATUS=$(curl -s "https://undependent.dev/api/v1/dashboard/$SCAN_ID" \
+              -H "X-API-Key: $UNDEPENDENT_API_KEY" | jq -r '.status')
+
+            if [ "$STATUS" = "complete" ]; then
+              # Download and display results
+              curl -s "https://undependent.dev/api/v1/dashboard/$SCAN_ID" \
+                -H "X-API-Key: $UNDEPENDENT_API_KEY" | jq '.' > undependent-report.json
+
+              VULN_COUNT=$(jq '.result.vuln_count // 0' undependent-report.json)
+              RISK_SCORE=$(jq '.result.risk_score // 0' undependent-report.json)
+              RISK_LEVEL=$(jq -r '.result.risk_level // "unknown"' undependent-report.json)
+
+              echo "::notice::Undependent Scan Complete"
+              echo "::notice::Vulnerabilities: $VULN_COUNT"
+              echo "::notice::Risk Score: $RISK_SCORE/100 ($RISK_LEVEL)"
+
+              # Fail on critical risk
+              if [ "$RISK_SCORE" -ge 70 ]; then
+                echo "::error::Risk score $RISK_SCORE exceeds threshold (70). Review undependent-report.json"
+                exit 1
+              fi
+
+              exit 0
+            fi
+
+            if [ "$STATUS" = "failed" ]; then
+              echo "::error::Undependent scan failed"
+              exit 1
+            fi
+          done
+
+          echo "::error::Scan timed out after 5 minutes"
+          exit 1
+
+      - name: Upload scan report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: undependent-report
+          path: undependent-report.json
+          retention-days: 30

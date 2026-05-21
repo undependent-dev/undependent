@@ -1,0 +1,30 @@
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated artifacts
+undep.lock
+undep.yaml
+LICENSE.absorbed
+sbom.json
+sbom.spdx.json
+
+# Reports
+reports/
+
+# Runtime data
+data/
+
+# Build output (local dev)
+undependent-server
+undep
+undep.exe

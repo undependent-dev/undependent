@@ -1,0 +1,594 @@
+// Package report generates PDF security reports.
+package report
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/jung-kurt/gofpdf"
+)
+
+// ScanResult mirrors the worker's result type for PDF generation.
+type ScanResult struct {
+	RepoURL      string   `json:"repo_url"`
+	Language     string   `json:"language"`
+	DepCount     int      `json:"dep_count"`
+	VulnCount    int      `json:"vuln_count"`
+	RiskScore    int      `json:"risk_score"`
+	RiskLevel    string   `json:"risk_level"`
+	Dependencies []DepEnt `json:"dependencies"`
+	Vulns        []VulnEnt `json:"vulnerabilities"`
+	Licenses     []LicEnt `json:"licenses"`
+}
+
+type DepEnt struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	License string `json:"license"`
+}
+
+type VulnEnt struct {
+	ID       string `json:"id"`
+	Summary  string `json:"summary"`
+	Severity string `json:"severity"`
+	Package  string `json:"package"`
+}
+
+type LicEnt struct {
+	Module string `json:"module"`
+	Type   string `json:"type"`
+	Viral  bool   `json:"viral"`
+}
+
+// GeneratePDF creates a full security assessment PDF.
+func GeneratePDF(result ScanResult) ([]byte, error) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetFont("Helvetica", "", 12)
+
+	// ── Cover Page ──
+	pdf.AddPage()
+	pdf.SetY(40)
+	pdf.SetFontSize(28)
+	pdf.SetFont("Helvetica", "B", 28)
+	pdf.Cell(0, 15, "Supply Chain Security Report")
+	pdf.Ln(25)
+	pdf.SetFontSize(16)
+	pdf.SetFont("Helvetica", "", 16)
+	pdf.Cell(0, 10, result.RepoURL)
+	pdf.Ln(15)
+	pdf.SetFontSize(12)
+	pdf.Cell(0, 10, fmt.Sprintf("Generated: %s", time.Now().UTC().Format("2006-01-02")))
+	pdf.Ln(30)
+
+	// Risk score box
+	r0, r1, r2 := riskColor(result.RiskLevel)
+	pdf.SetFillColor(r0, r1, r2)
+	pdf.SetDrawColor(200, 200, 200)
+	pdf.Rect(50, pdf.GetY(), 110, 35, "DF")
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFontSize(22)
+	pdf.SetFont("Helvetica", "B", 22)
+	pdf.SetX(85)
+	pdf.Cell(0, 15, fmt.Sprintf("Risk Score: %d", result.RiskScore))
+	pdf.Ln(10)
+	pdf.SetFontSize(14)
+	pdf.SetFont("Helvetica", "", 14)
+	pdf.SetX(85)
+	pdf.Cell(0, 10, strings.Title(result.RiskLevel))
+	pdf.SetTextColor(0, 0, 0)
+
+	// ── Executive Summary ──
+	pdf.AddPage()
+	pdf.SetFontSize(18)
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.Cell(0, 12, "Executive Summary")
+	pdf.Ln(15)
+	pdf.SetFontSize(11)
+	pdf.SetFont("Helvetica", "", 11)
+
+	summary := fmt.Sprintf(
+		"This report analyzes the supply chain security posture of %s (%s).\n\n"+
+			"The project depends on %d third-party packages. Of these, %d have known vulnerabilities.\n\n"+
+			"Overall risk level: %s (score: %d out of 100).\n\n"+
+			"Key findings are detailed in the sections below.",
+		result.RepoURL, result.Language, result.DepCount, result.VulnCount,
+		strings.Title(result.RiskLevel), result.RiskScore,
+	)
+	pdf.MultiCell(0, 6, summary, "", "LEFT", false)
+
+	// ── Dependency Inventory ──
+	pdf.AddPage()
+	pdf.SetFontSize(18)
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.Cell(0, 12, "Dependency Inventory")
+	pdf.Ln(15)
+
+	if len(result.Dependencies) == 0 {
+		pdf.SetFontSize(10)
+		pdf.SetFont("Helvetica", "", 10)
+		pdf.Cell(0, 8, "No dependencies detected.")
+	} else {
+		writeDepTable(pdf, result.Dependencies)
+	}
+
+	// ── Vulnerabilities ──
+	pdf.AddPage()
+	pdf.SetFontSize(18)
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.Cell(0, 12, "Known Vulnerabilities")
+	pdf.Ln(15)
+
+	if len(result.Vulns) == 0 {
+		pdf.SetFontSize(10)
+		pdf.SetFont("Helvetica", "", 10)
+		pdf.Cell(0, 8, "No known vulnerabilities found.")
+	} else {
+		writeVulnTable(pdf, result.Vulns)
+	}
+
+	// ── License Compatibility ──
+	pdf.AddPage()
+	pdf.SetFontSize(18)
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.Cell(0, 12, "License Compatibility")
+	pdf.Ln(15)
+
+	if len(result.Licenses) == 0 {
+		pdf.SetFontSize(10)
+		pdf.SetFont("Helvetica", "", 10)
+		pdf.Cell(0, 8, "No license information available.")
+	} else {
+		writeLicTable(pdf, result.Licenses)
+	}
+
+	// ── Compliance Mapping (SOC2/GDPR) ──
+	pdf.AddPage()
+	pdf.SetFontSize(18)
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.Cell(0, 12, "Compliance Mapping (SOC2 / GDPR)")
+	pdf.Ln(15)
+	pdf.SetFontSize(11)
+	pdf.SetFont("Helvetica", "", 11)
+
+	writeComplianceSection(pdf, result)
+
+	// ── Remediation Roadmap ──
+	pdf.AddPage()
+	pdf.SetFontSize(18)
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.Cell(0, 12, "Remediation Roadmap")
+	pdf.Ln(15)
+	pdf.SetFontSize(11)
+	pdf.SetFont("Helvetica", "", 11)
+
+	steps := generateRemediationSteps(result)
+	for i, step := range steps {
+		pdf.SetFont("Helvetica", "B", 11)
+		pdf.Cell(0, 8, fmt.Sprintf("%d. %s", i+1, step.Title))
+		pdf.Ln(8)
+		pdf.SetFont("Helvetica", "", 10)
+		pdf.MultiCell(0, 5, step.Description, "", "LEFT", false)
+		pdf.Ln(3)
+	}
+
+	// ── Next Steps (Sales) ──
+	pdf.AddPage()
+	pdf.SetFontSize(18)
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.Cell(0, 12, "Next Steps")
+	pdf.Ln(15)
+	pdf.SetFontSize(11)
+	pdf.SetFont("Helvetica", "", 11)
+
+	nextSteps := `This report was generated by Undependent — the supply chain security platform that eliminates dependency risk.
+
+For automated remediation, continuous monitoring, and CI/CD integration:
+
+  Enterprise Plan: Custom pricing
+  - Unlimited scans across all repositories
+  - Automated dependency absorption
+  - CI/CD pipeline integration
+  - Priority support & compliance reporting
+
+Contact: sales@undependent.dev
+Website: undependent.dev`
+	pdf.MultiCell(0, 6, nextSteps, "", "LEFT", false)
+
+	// ── SBOM Appendix ──
+	pdf.AddPage()
+	pdf.SetFontSize(18)
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.Cell(0, 12, "SBOM (Software Bill of Materials)")
+	pdf.Ln(15)
+	pdf.SetFontSize(8)
+	pdf.SetFont("Courier", "", 8)
+	sbom := generateSBOMText(result)
+	pdf.MultiCell(0, 4, sbom, "", "LEFT", false)
+
+	// Output to byte slice
+	var buf strings.Builder
+	pdf.Output(&buf)
+	return []byte(buf.String()), nil
+}
+
+// RemediationStep is a single step in the remediation roadmap.
+type RemediationStep struct {
+	Title       string
+	Description string
+}
+
+func generateRemediationSteps(result ScanResult) []RemediationStep {
+	var steps []RemediationStep
+
+	// Critical vulns first
+	for _, v := range result.Vulns {
+		if v.Severity == "critical" || v.Severity == "high" {
+			steps = append(steps, RemediationStep{
+				Title:       fmt.Sprintf("Fix %s in %s", v.ID, v.Package),
+				Description: fmt.Sprintf("%s. Update %s to a patched version or consider absorbing the dependency.", v.Summary, v.Package),
+			})
+		}
+	}
+
+	// Viral license warnings
+	for _, l := range result.Licenses {
+		if l.Viral {
+			steps = append(steps, RemediationStep{
+				Title:       fmt.Sprintf("Review %s license (%s)", l.Module, l.Type),
+				Description: fmt.Sprintf("%s is licensed under %s (viral). Consider absorbing this dependency or replacing it with a permissively-licensed alternative.", l.Module, l.Type),
+			})
+		}
+	}
+
+	// General recommendations
+	if result.DepCount > 20 {
+		steps = append(steps, RemediationStep{
+			Title:       "Reduce dependency count",
+			Description: fmt.Sprintf("Your project has %d dependencies. Each dependency increases your attack surface. Consider absorbing critical dependencies to eliminate supply chain risk.", result.DepCount),
+		})
+	}
+
+	if len(steps) == 0 {
+		steps = append(steps, RemediationStep{
+			Title:       "Maintain current posture",
+			Description: "No critical issues found. Continue monitoring dependencies for new vulnerabilities.",
+		})
+	}
+
+	return steps
+}
+
+func generateSBOMText(result ScanResult) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Package Count: %d\n", result.DepCount))
+	sb.WriteString(fmt.Sprintf("Language: %s\n\n", result.Language))
+	for _, d := range result.Dependencies {
+		sb.WriteString(fmt.Sprintf("%s@%s [%s]\n", d.Name, d.Version, d.License))
+	}
+	return sb.String()
+}
+
+func riskColor(level string) (int, int, int) {
+	switch level {
+	case "critical":
+		return 220, 38, 38
+	case "high":
+		return 234, 88, 12
+	case "medium":
+		return 234, 179, 8
+	case "low":
+		return 34, 197, 94
+	default:
+		return 107, 114, 128
+	}
+}
+
+// ── Table Writers ──
+
+func writeDepTable(pdf *gofpdf.Fpdf, deps []DepEnt) {
+	colW := []float64{70, 35, 35}
+	headers := []string{"Package", "Version", "License"}
+
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.SetFillColor(240, 240, 240)
+	for i, h := range headers {
+		pdf.Cell(colW[i], 7, h)
+	}
+	pdf.Ln(7)
+
+	pdf.SetFont("Helvetica", "", 9)
+	fill := false
+	for _, d := range deps {
+		if fill {
+			pdf.SetFillColor(248, 248, 248)
+			pdf.Cell(colW[0], 6, d.Name)
+			pdf.Cell(colW[1], 6, d.Version)
+			pdf.Cell(colW[2], 6, d.License)
+			pdf.SetDrawColor(200, 200, 200)
+			pdf.Line(10, pdf.GetY(), 10+colW[0]+colW[1]+colW[2], pdf.GetY())
+		} else {
+			pdf.Cell(colW[0], 6, d.Name)
+			pdf.Cell(colW[1], 6, d.Version)
+			pdf.Cell(colW[2], 6, d.License)
+		}
+		pdf.Ln(6)
+		fill = !fill
+	}
+}
+
+func writeVulnTable(pdf *gofpdf.Fpdf, vulns []VulnEnt) {
+	colW := []float64{40, 25, 70}
+	headers := []string{"CVE ID", "Severity", "Summary"}
+
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.SetFillColor(240, 240, 240)
+	for i, h := range headers {
+		pdf.Cell(colW[i], 7, h)
+	}
+	pdf.Ln(7)
+
+	pdf.SetFont("Helvetica", "", 9)
+	for _, v := range vulns {
+		pdf.Cell(colW[0], 6, v.ID)
+		sc0, sc1, sc2 := severityColor(v.Severity)
+		pdf.SetTextColor(sc0, sc1, sc2)
+		pdf.Cell(colW[1], 6, strings.ToUpper(v.Severity))
+		pdf.SetTextColor(0, 0, 0)
+		pdf.Cell(colW[2], 6, v.Summary)
+		pdf.Ln(6)
+	}
+}
+
+func writeLicTable(pdf *gofpdf.Fpdf, licenses []LicEnt) {
+	colW := []float64{70, 35, 35}
+	headers := []string{"Module", "License", "Viral"}
+
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.SetFillColor(240, 240, 240)
+	for i, h := range headers {
+		pdf.Cell(colW[i], 7, h)
+	}
+	pdf.Ln(7)
+
+	pdf.SetFont("Helvetica", "", 9)
+	for _, l := range licenses {
+		pdf.Cell(colW[0], 6, l.Module)
+		pdf.Cell(colW[1], 6, l.Type)
+		viralStr := "No"
+		if l.Viral {
+			viralStr = "Yes"
+			pdf.SetTextColor(220, 38, 38)
+		}
+		pdf.Cell(colW[2], 6, viralStr)
+		pdf.SetTextColor(0, 0, 0)
+		pdf.Ln(6)
+	}
+}
+
+func severityColor(severity string) (int, int, int) {
+	switch severity {
+	case "critical":
+		return 220, 38, 38
+	case "high":
+		return 234, 88, 12
+	default:
+		return 0, 0, 0
+	}
+}
+
+// ── Compliance Section ──
+
+type complianceControl struct {
+	Framework string
+	Control   string
+	Status    string // "pass", "warning", "fail"
+	Detail    string
+}
+
+func writeComplianceSection(pdf *gofpdf.Fpdf, result ScanResult) {
+	controls := generateComplianceControls(result)
+
+	// SOC2 section
+	pdf.SetFont("Helvetica", "B", 13)
+	pdf.Cell(0, 10, "SOC2 Trust Services Criteria")
+	pdf.Ln(12)
+
+	soc2Controls := filterControls(controls, "SOC2")
+	writeComplianceTable(pdf, soc2Controls)
+
+	pdf.Ln(8)
+
+	// GDPR section
+	pdf.SetFont("Helvetica", "B", 13)
+	pdf.Cell(0, 10, "GDPR Data Processing")
+	pdf.Ln(12)
+
+	gdprControls := filterControls(controls, "GDPR")
+	writeComplianceTable(pdf, gdprControls)
+
+	pdf.Ln(8)
+
+	// Summary
+	pdf.SetFont("Helvetica", "", 10)
+	passCount := 0
+	warnCount := 0
+	failCount := 0
+	for _, c := range controls {
+		switch c.Status {
+		case "pass":
+			passCount++
+		case "warning":
+			warnCount++
+		case "fail":
+			failCount++
+		}
+	}
+
+	summary := fmt.Sprintf("Compliance Summary: %d passing, %d warnings, %d failures out of %d controls.\n\n",
+		passCount, warnCount, failCount, len(controls))
+	pdf.MultiCell(0, 5, summary, "", "LEFT", false)
+
+	if failCount > 0 {
+		pdf.SetFont("Helvetica", "B", 10)
+		pdf.SetTextColor(220, 38, 38)
+		pdf.MultiCell(0, 5, "Action Required: Failed controls must be remediated before compliance certification.", "", "LEFT", false)
+		pdf.SetTextColor(0, 0, 0)
+	}
+}
+
+func generateComplianceControls(result ScanResult) []complianceControl {
+	var controls []complianceControl
+
+	// SOC2 - CC6.1: Logical Access (dependency vetting)
+	hasVulns := result.VulnCount > 0
+	hasCritical := false
+	for _, v := range result.Vulns {
+		if v.Severity == "critical" {
+			hasCritical = true
+			break
+		}
+	}
+
+	controls = append(controls, complianceControl{
+		Framework: "SOC2",
+		Control:   "CC6.1 — Logical & Physical Access Controls",
+		Status:    "pass",
+		Detail:    "Dependencies are inventoried and tracked via SBOM.",
+	})
+
+	if hasCritical {
+		controls = append(controls, complianceControl{
+			Framework: "SOC2",
+			Control:   "CC6.3 — Security of System Components",
+			Status:    "fail",
+			Detail:    fmt.Sprintf("%d critical-severity vulnerabilities found in dependencies. Remediation required.", countBySeverity(result.Vulns, "critical")),
+		})
+	} else if hasVulns {
+		controls = append(controls, complianceControl{
+			Framework: "SOC2",
+			Control:   "CC6.3 — Security of System Components",
+			Status:    "warning",
+			Detail:    fmt.Sprintf("%d non-critical vulnerabilities found. Monitor and patch within 30 days.", result.VulnCount),
+		})
+	} else {
+		controls = append(controls, complianceControl{
+			Framework: "SOC2",
+			Control:   "CC6.3 — Security of System Components",
+			Status:    "pass",
+			Detail:    "No known vulnerabilities in dependencies.",
+		})
+	}
+
+	// SOC2 - CC7.2: Monitoring activities
+	controls = append(controls, complianceControl{
+		Framework: "SOC2",
+		Control:   "CC7.2 — Monitoring Activities",
+		Status:    "pass",
+		Detail:    "Continuous dependency scanning available via Undependent CI/CD integration.",
+	})
+
+	// GDPR - Article 32: Security of processing
+	hasViral := false
+	for _, l := range result.Licenses {
+		if l.Viral {
+			hasViral = true
+			break
+		}
+	}
+
+	controls = append(controls, complianceControl{
+		Framework: "GDPR",
+		Control:   "Article 32 — Security of Processing",
+		Status:    "pass",
+		Detail:    "Supply chain dependencies are audited for known security vulnerabilities.",
+	})
+
+	// GDPR - Article 28: Processor requirements
+	if hasViral {
+		controls = append(controls, complianceControl{
+			Framework: "GDPR",
+			Control:   "Article 28 — Processor Requirements",
+			Status:    "warning",
+			Detail:    "Viral licenses (GPL/AGPL) detected. Review data processing obligations with legal counsel.",
+		})
+	} else {
+		controls = append(controls, complianceControl{
+			Framework: "GDPR",
+			Control:   "Article 28 — Processor Requirements",
+			Status:    "pass",
+			Detail:    "All dependencies use permissive licenses compatible with data processing.",
+		})
+	}
+
+	// GDPR - Article 5(1)(f): Integrity and confidentiality
+	if result.RiskScore >= 70 {
+		controls = append(controls, complianceControl{
+			Framework: "GDPR",
+			Control:   "Article 5(1)(f) — Integrity & Confidentiality",
+			Status:    "fail",
+			Detail:    fmt.Sprintf("Risk score %d/100 exceeds acceptable threshold. Dependency supply chain poses data breach risk.", result.RiskScore),
+		})
+	} else {
+		controls = append(controls, complianceControl{
+			Framework: "GDPR",
+			Control:   "Article 5(1)(f) — Integrity & Confidentiality",
+			Status:    "pass",
+			Detail:    fmt.Sprintf("Risk score %d/100 within acceptable bounds.", result.RiskScore),
+		})
+	}
+
+	return controls
+}
+
+func filterControls(controls []complianceControl, framework string) []complianceControl {
+	var filtered []complianceControl
+	for _, c := range controls {
+		if c.Framework == framework {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
+}
+
+func writeComplianceTable(pdf *gofpdf.Fpdf, controls []complianceControl) {
+	colW := []float64{50, 55, 20, 40}
+	headers := []string{"Control", "Description", "Status", "Notes"}
+
+	pdf.SetFont("Helvetica", "B", 8)
+	pdf.SetFillColor(240, 240, 240)
+	for i, h := range headers {
+		pdf.Cell(colW[i], 6, h)
+	}
+	pdf.Ln(6)
+
+	pdf.SetFont("Helvetica", "", 8)
+	for _, c := range controls {
+		pdf.Cell(colW[0], 5, c.Control)
+		pdf.Cell(colW[1], 5, c.Detail)
+
+		switch c.Status {
+		case "pass":
+			pdf.SetTextColor(34, 197, 94)
+		case "warning":
+			pdf.SetTextColor(234, 179, 8)
+		case "fail":
+			pdf.SetTextColor(220, 38, 38)
+		}
+		pdf.Cell(colW[2], 5, strings.ToUpper(c.Status))
+		pdf.SetTextColor(0, 0, 0)
+
+		pdf.Cell(colW[3], 5, "")
+		pdf.Ln(5)
+	}
+}
+
+func countBySeverity(vulns []VulnEnt, severity string) int {
+	count := 0
+	for _, v := range vulns {
+		if v.Severity == severity {
+			count++
+		}
+	}
+	return count
+}
