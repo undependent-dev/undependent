@@ -10,8 +10,11 @@ RUN go mod download
 
 COPY . .
 
-# Build the server binary (pure Go, no CGO)
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /usr/local/bin/undependent ./cmd/server
+# Build the CLI binary (default — standalone tool)
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /usr/local/bin/undependent ./cmd/cli
+
+# Build the server binary (for hosted platform)
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /usr/local/bin/undependent-server ./cmd/server
 
 # Stage 2: Runtime
 FROM alpine:3.19
@@ -20,16 +23,18 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /app
 
-# Copy binary
+# Copy both binaries
 COPY --from=builder /usr/local/bin/undependent /usr/local/bin/undependent
+COPY --from=builder /usr/local/bin/undependent-server /usr/local/bin/undependent-server
 
 # Copy static assets
 COPY docs/ /app/docs/
 
-# Create data directory for SQLite
+# Create data directory for SQLite (server mode)
 RUN mkdir -p /app/data
 
 EXPOSE 8080
 
-# Run
-CMD ["undependent"]
+# Default: run as CLI (pass arguments through)
+ENTRYPOINT ["undependent"]
+CMD ["--help"]

@@ -31,10 +31,35 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-      - name: Build
-        run: CGO_ENABLED=0 go build -trimpath -o undependent ./cmd/server
-      - name: Upload binary
+
+      # Build CLI binaries for all platforms
+      - name: Build CLI Linux AMD64
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/undependent_linux_amd64 ./cmd/cli
+      - name: Build CLI Linux ARM64
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/undependent_linux_arm64 ./cmd/cli
+      - name: Build CLI macOS AMD64
+        run: CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o dist/undependent_darwin_amd64 ./cmd/cli
+      - name: Build CLI macOS ARM64
+        run: CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o dist/undependent_darwin_arm64 ./cmd/cli
+      - name: Build CLI Windows AMD64
+        run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o dist/undependent_windows_amd64.exe ./cmd/cli
+
+      # Build server binary
+      - name: Build Server
+        run: CGO_ENABLED=0 go build -trimpath -o dist/undependent-server ./cmd/server
+
+      - name: Upload CLI artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: undependent
-          path: undependent
+          name: undependent-cli
+          path: |
+            dist/undependent_linux_amd64
+            dist/undependent_linux_arm64
+            dist/undependent_darwin_amd64
+            dist/undependent_darwin_arm64
+            dist/undependent_windows_amd64.exe
+      - name: Upload Server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: undependent-server
+          path: dist/undependent-server
