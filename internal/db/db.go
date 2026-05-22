@@ -62,9 +62,36 @@ func (db *DB) Init() error {
 			active     INTEGER DEFAULT 1,
 			created_at TEXT DEFAULT (datetime('now'))
 		);
+		CREATE TABLE IF NOT EXISTS users (
+			id           TEXT PRIMARY KEY,
+			email        TEXT NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			name         TEXT,
+			tier         TEXT DEFAULT 'free',
+			created_at   TEXT DEFAULT (datetime('now'))
+		);
+		CREATE TABLE IF NOT EXISTS subscriptions (
+			id              TEXT PRIMARY KEY,
+			user_id         TEXT REFERENCES users(id),
+			stripe_sub_id   TEXT,
+			tier            TEXT NOT NULL,
+			status          TEXT DEFAULT 'active',
+			created_at      TEXT DEFAULT (datetime('now')),
+			cancel_at       TEXT
+		);
+		CREATE TABLE IF NOT EXISTS github_installs (
+			id              INTEGER PRIMARY KEY,
+			owner           TEXT NOT NULL,
+			repo            TEXT,
+			installation_id TEXT NOT NULL UNIQUE,
+			status          TEXT DEFAULT 'active',
+			created_at      TEXT DEFAULT (datetime('now'))
+		);
 		CREATE INDEX IF NOT EXISTS idx_jobs_type ON jobs(job_type, status, created_at);
 		CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, created_at);
 		CREATE INDEX IF NOT EXISTS idx_scans_status ON scans(status);
+		CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+		CREATE INDEX IF NOT EXISTS idx_subs_user ON subscriptions(user_id);
 	`)
 	return err
 }
@@ -282,4 +309,135 @@ func (db *DB) GetAllAPIKeys() ([]*APIKey, error) {
 		keys = append(keys, k)
 	}
 	return keys, rows.Err()
+}
+
+// ── Users ──
+
+type User struct {
+	ID           string `json:"id"`
+	Email        string `json:"email"`
+	PasswordHash string `json:"-"`
+	Name         string `json:"name,omitempty"`
+	Tier         string `json:"tier"`
+	CreatedAt    string `json:"created_at"`
+}
+
+func (db *DB) CreateUser(id, email, passwordHash, name, tier string) error {
+	_, err := db.conn.Exec(
+		"INSERT INTO users (id, email, password_hash, name, tier) VALUES (?, ?, ?, ?, ?)",
+		id, email, passwordHash, name, tier,
+	)
+	return err
+}
+
+func (db *DB) GetUserByEmail(email string) (*User, error) {
+	u := &User{}
+	err := db.conn.QueryRow(`
+		SELECT id, email, password_hash, name, tier, created_at FROM users WHERE email = ?`, email,
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Tier, &u.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("user not found")
+	}
+	return u, err
+}
+
+func (db *DB) GetUserByID(id string) (*User, error) {
+	u := &User{}
+	err := db.conn.QueryRow(`
+		SELECT id, email, password_hash, name, tier, created_at FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Tier, &u.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("user not found")
+	}
+	return u, err
+}
+
+func (db *DB) UpdateUserTier(id, tier string) error {
+	_, err := db.conn.Exec("UPDATE users SET tier = ? WHERE id = ?", tier, id)
+	return err
+}
+
+// ── Subscriptions ──
+
+type Subscription struct {
+	ID          string `json:"id"`
+	UserID      string `json:"user_id"`
+	StripeSubID string `json:"stripe_sub_id,omitempty"`
+	Tier        string `json:"tier"`
+	Status      string `json:"status"`
+	CreatedAt   string `json:"created_at"`
+	CancelAt    string `json:"cancel_at,omitempty"`
+}
+
+func (db *DB) CreateSubscription(id, userID, stripeSubID, tier, status string) error {
+	_, err := db.conn.Exec(
+		"INSERT INTO subscriptions (id, user_id, stripe_sub_id, tier, status) VALUES (?, ?, ?, ?, ?)",
+		id, userID, stripeSubID, tier, status,
+	)
+	return err
+}
+
+func (db *DB) GetSubscriptionByStripeID(stripeSubID string) (*Subscription, error) {
+	s := &Subscription{}
+	err := db.conn.QueryRow(`
+		SELECT id, user_id, stripe_sub_id, tier, status, created_at, cancel_at
+		FROM subscriptions WHERE stripe_sub_id = ?`, stripeSubID,
+	).Scan(&s.ID, &s.UserID, &s.StripeSubID, &s.Tier, &s.Status, &s.CreatedAt, &s.CancelAt)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("subscription not found")
+	}
+	return s, err
+}
+
+func (db *DB) GetSubscriptionByUserID(userID string) (*Subscription, error) {
+	s := &Subscription{}
+	err := db.conn.QueryRow(`
+		SELECT id, user_id, stripe_sub_id, tier, status, created_at, cancel_at
+		FROM subscriptions WHERE user_id = ? AND status = 'active'`, userID,
+	).Scan(&s.ID, &s.UserID, &s.StripeSubID, &s.Tier, &s.Status, &s.CreatedAt, &s.CancelAt)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("subscription not found")
+	}
+	return s, err
+}
+
+func (db *DB) UpdateSubscriptionStatus(id, status string) error {
+	_, err := db.conn.Exec("UPDATE subscriptions SET status = ? WHERE id = ?", status, id)
+	return err
+}
+
+// ── GitHub Installs ──
+
+type GitHubInstall struct {
+	ID            int    `json:"id"`
+	Owner         string `json:"owner"`
+	Repo          string `json:"repo,omitempty"`
+	InstallationID string `json:"installation_id"`
+	Status        string `json:"status"`
+	CreatedAt     string `json:"created_at"`
+}
+
+func (db *DB) CreateGitHubInstall(installationID, owner, repo, status string) error {
+	_, err := db.conn.Exec(
+		"INSERT INTO github_installs (installation_id, owner, repo, status) VALUES (?, ?, ?, ?)",
+		installationID, owner, repo, status,
+	)
+	return err
+}
+
+func (db *DB) GetGitHubInstallByInstallationID(installationID string) (*GitHubInstall, error) {
+	g := &GitHubInstall{}
+	err := db.conn.QueryRow(`
+		SELECT id, owner, repo, installation_id, status, created_at
+		FROM github_installs WHERE installation_id = ?`, installationID,
+	).Scan(&g.ID, &g.Owner, &g.Repo, &g.InstallationID, &g.Status, &g.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("github install not found")
+	}
+	return g, err
+}
+
+func (db *DB) UpdateGitHubInstallStatus(installationID, status string) error {
+	_, err := db.conn.Exec("UPDATE github_installs SET status = ? WHERE installation_id = ?", status, installationID)
+	return err
 }

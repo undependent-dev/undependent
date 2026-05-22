@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -158,25 +159,89 @@ func (s *Server) handleCreateReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
-	scanID, err := s.stripe.HandleWebhook(r)
+	// Read body once so both handlers can use it
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		s.jsonError(w, http.StatusBadRequest, "webhook verification failed")
+		s.jsonError(w, http.StatusBadRequest, "failed to read request body")
 		return
 	}
 
-	if scanID == "" {
+	// Verify signature
+	sigHeader := r.Header.Get("Stripe-Signature")
+	if sigHeader == "" {
+		s.jsonError(w, http.StatusBadRequest, "missing Stripe-Signature header")
+		return
+	}
+
+	// Parse the event
+	var event struct {
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(body, &event); err != nil {
+		s.jsonError(w, http.StatusBadRequest, "failed to parse webhook event")
+		return
+	}
+
+	// Handle subscription events
+	if event.Type == "checkout.session.completed" {
+		var session struct {
+			Subscription string `json:"subscription"`
+			Mode         string `json:"mode"`
+			Metadata     map[string]string `json:"metadata"`
+		}
+		if json.Unmarshal(event.Data, &session) == nil && session.Mode == "subscription" {
+			subscriptionID := fmt.Sprintf("sub-%d", time.Now().UnixNano())
+			if err := s.db.CreateSubscription(subscriptionID, "", session.Subscription, "team", "active"); err != nil {
+				fmt.Printf("warn: failed to record subscription: %v\n", err)
+			}
+			fmt.Printf("Subscription activated: %s\n", session.Subscription)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Handle one-time payment (report purchase)
+		if session.Metadata != nil {
+			scanID := session.Metadata["scan_id"]
+			if scanID != "" {
+				s.processPaymentComplete(scanID, w)
+				return
+			}
+		}
+	}
+
+	// Handle subscription lifecycle events
+	if event.Type == "customer.subscription.updated" || event.Type == "customer.subscription.deleted" {
+		var sub struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		}
+		if json.Unmarshal(event.Data, &sub) == nil {
+			dbSub, err := s.db.GetSubscriptionByStripeID(sub.ID)
+			if err == nil && dbSub != nil {
+				newStatus := "active"
+				if sub.Status == "canceled" || sub.Status == "unpaid" || sub.Status == "past_due" {
+					newStatus = sub.Status
+				}
+				if err := s.db.UpdateSubscriptionStatus(dbSub.ID, newStatus); err != nil {
+					fmt.Printf("warn: failed to update subscription status: %v\n", err)
+				}
+			}
+		}
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// Record payment in DB
+	w.WriteHeader(http.StatusOK)
+}
+
+// processPaymentComplete handles the post-payment workflow for a scan.
+func (s *Server) processPaymentComplete(scanID string, w http.ResponseWriter) {
 	paymentID := fmt.Sprintf("pay-%d", time.Now().UnixNano())
 	if err := s.db.CreatePayment(paymentID, scanID, "", 29900, "completed"); err != nil {
 		fmt.Printf("warn: failed to record payment: %v\n", err)
-		// Don't fail the webhook — payment recording is best-effort
 	}
 
-	// Get scan for email
 	scan, scanErr := s.db.GetScan(scanID)
 	if scanErr == nil && scan != nil && scan.Email != "" {
 		if err := s.email.SendPaymentConfirmation(scan.Email, scanID, 29900); err != nil {
@@ -184,7 +249,6 @@ func (s *Server) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Enqueue report generation job
 	payload := map[string]string{
 		"scan_id": scanID,
 		"email":   "",

@@ -11,12 +11,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/undep/undep/internal/analyze"
 	"github.com/undep/undep/internal/config"
@@ -24,6 +28,7 @@ import (
 	"github.com/undep/undep/internal/inline"
 	"github.com/undep/undep/internal/jsts"
 	"github.com/undep/undep/internal/license"
+	"github.com/undep/undep/internal/osv"
 	"github.com/undep/undep/internal/report"
 	"github.com/undep/undep/pkg/types"
 )
@@ -91,6 +96,7 @@ Examples:
   undependent scan .                    Scan current directory
   undependent scan /path/to/project     Scan specific project
   undependent inline .                  Inline all dependencies
+  undependent inline . --pr             Inline deps & create GitHub PR
   undependent verify .                  Verify inlined code integrity
   undependent report . --output report.pdf   Generate PDF report
   undependent init                      Create default config
@@ -196,6 +202,50 @@ func cmdScan(args []string) error {
 		}
 	}
 
+	// Python detection
+	pyScanPath := filepath.Join(targetDir, "requirements.txt")
+	if _, err := os.Stat(pyScanPath); err == nil {
+		fmt.Println("\nPhase 5b: Scanning Python dependencies...")
+		fmt.Printf("  Found requirements.txt — Python dependency tracking available\n")
+	}
+	pyprojectPath := filepath.Join(targetDir, "pyproject.toml")
+	if _, err := os.Stat(pyprojectPath); err == nil {
+		fmt.Println("\nPhase 5c: Scanning Python (pyproject.toml) dependencies...")
+		fmt.Printf("  Found pyproject.toml — Python dependency tracking available\n")
+	}
+
+	// Rust detection
+	cargoPath := filepath.Join(targetDir, "Cargo.toml")
+	if _, err := os.Stat(cargoPath); err == nil {
+		fmt.Println("\nPhase 5d: Scanning Rust dependencies...")
+		fmt.Printf("  Found Cargo.toml — Rust dependency tracking available\n")
+	}
+
+	// Vulnerability scanning via OSV
+	fmt.Println("\nPhase 6: Checking for known vulnerabilities (OSV)...")
+	osvClient := osv.NewClient()
+	var allVulns []*osv.QueryResult
+	for modPath := range depGraph.Nodes {
+		version := ""
+		if vv, ok := resolver.AllModules[modPath]; ok {
+			version = vv
+		}
+		results, err := osvClient.Query(context.Background(), modPath, version, "go")
+		if err != nil {
+			fmt.Printf("  Warning: OSV query failed for %s: %v\n", modPath, err)
+			continue
+		}
+		if len(results.Vulns) > 0 {
+			allVulns = append(allVulns, results)
+			for _, v := range results.Vulns {
+				fmt.Printf("  [!] %-40s %s (%s) — %s\n", modPath, v.ID, v.Severity, v.Summary)
+			}
+		}
+	}
+	if len(allVulns) == 0 {
+		fmt.Println("  No known vulnerabilities found")
+	}
+
 	fmt.Println("\n─────────────────────────────────────────────")
 	fmt.Printf("SCAN SUMMARY\n")
 	fmt.Printf("  Module:              %s\n", modulePath)
@@ -212,6 +262,14 @@ func cmdScan(args []string) error {
 	}
 	if viralCount > 0 {
 		fmt.Printf("  Viral licenses:      %d\n", viralCount)
+	}
+
+	totalVulns := 0
+	for _, qr := range allVulns {
+		totalVulns += len(qr.Vulns)
+	}
+	if totalVulns > 0 {
+		fmt.Printf("  Vulnerabilities:     %d\n", totalVulns)
 	}
 	fmt.Println("─────────────────────────────────────────────")
 
@@ -239,6 +297,20 @@ func cmdScan(args []string) error {
 func cmdInline(args []string) error {
 	targetDir, outputFlags := parseArgs(args)
 	targetDir = resolveDir(targetDir)
+
+	// Check for --pr flag
+	createPR := false
+	var prRepo string
+	for _, f := range outputFlags {
+		if f == "--pr" {
+			createPR = true
+			continue
+		}
+		if strings.HasPrefix(f, "--pr=") {
+			createPR = true
+			prRepo = strings.TrimPrefix(f, "--pr=")
+		}
+	}
 
 	modulePath, err := discoverModule(targetDir)
 	if err != nil {
@@ -270,9 +342,9 @@ func cmdInline(args []string) error {
 
 	fmt.Println("Phase 1: Scanning symbol usage...")
 	analyzer := analyze.NewAnalyzer(targetDir, modulePath)
-	usages, err := analyzer.Scan()
-	if err != nil {
-		return fmt.Errorf("scan: %w", err)
+	usages, aerr := analyzer.Scan()
+	if aerr != nil {
+		return fmt.Errorf("scan: %w", aerr)
 	}
 
 	fmt.Println("Phase 2: Resolving transitive dependencies...")
@@ -356,7 +428,25 @@ func cmdInline(args []string) error {
 	fmt.Printf("  Replace directives:   %d\n", len(directives))
 	fmt.Printf("  Output:               %s\n", outputDir)
 	fmt.Println("─────────────────────────────────────────────")
-	fmt.Println("\nRun 'go mod tidy' to clean up, then 'go build' to verify.")
+
+	// Phase 7: Create PR if requested
+	if createPR {
+		fmt.Println("\nPhase 7: Creating Pull Request...")
+		if err := createPullRequest(targetDir, prRepo, len(moduleSources)); err != nil {
+			fmt.Printf("  Warning: PR creation failed: %v\n", err)
+			fmt.Println("  Complete the PR manually:")
+			fmt.Println("    git checkout -b undependent/inline-deps")
+			fmt.Println("    git add -A")
+			fmt.Println("    git commit -m 'Inline dependencies with undependent'")
+			fmt.Println("    git push origin undependent/inline-deps")
+		} else {
+			fmt.Println("  Pull request created successfully!")
+		}
+	}
+
+	if !createPR {
+		fmt.Println("\nRun 'go mod tidy' to clean up, then 'go build' to verify.")
+	}
 
 	for _, f := range outputFlags {
 		if strings.HasPrefix(f, "--json=") {
@@ -767,4 +857,170 @@ func runGoBuild(dir string) bool {
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run() == nil
+}
+
+// createPullRequest creates a GitHub PR for inlined dependencies.
+// Uses git commands locally + GitHub API if GITHUB_TOKEN is set.
+func createPullRequest(targetDir, prRepo string, depCount int) error {
+	branch := "undependent/inline-deps"
+
+	// Detect remote origin
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd.Dir = targetDir
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("get remote origin: %w (is this a git repo?)", err)
+	}
+	remoteURL := strings.TrimSpace(string(output))
+
+	// Parse owner/repo from remote URL
+	owner, repo := parseGitHubRepo(remoteURL, prRepo)
+	if owner == "" {
+		// Fall back to local git operations
+		return createLocalPR(targetDir, branch, depCount)
+	}
+
+	// Try GitHub API if token is available
+	token := os.Getenv("GITHUB_TOKEN")
+	if token != "" {
+		return createGitHubPR(owner, repo, branch, token, depCount, targetDir)
+	}
+
+	// Fall back to local git
+	return createLocalPR(targetDir, branch, depCount)
+}
+
+func createLocalPR(targetDir, branch string, depCount int) error {
+	// Create branch
+	cmd := exec.Command("git", "checkout", "-b", branch)
+	cmd.Dir = targetDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		// Branch might already exist
+		cmd2 := exec.Command("git", "checkout", branch)
+		cmd2.Dir = targetDir
+		if out2, err2 := cmd2.CombinedOutput(); err2 != nil {
+			return fmt.Errorf("checkout branch: %s %s: %w", string(out), string(out2), err2)
+		}
+	}
+
+	// Stage changes
+	cmd = exec.Command("git", "add", "-A")
+	cmd.Dir = targetDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("stage changes: %s: %w", string(out), err)
+	}
+
+	// Commit
+	msg := fmt.Sprintf("Inline %d dependencies with undependent\n\nEliminate supply chain risk by absorbing third-party dependencies.\nNo external registries. No upstream compromise possible.", depCount)
+	cmd = exec.Command("git", "commit", "-m", msg)
+	cmd.Dir = targetDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("commit: %s: %w", string(out), err)
+	}
+
+	// Push
+	cmd = exec.Command("git", "push", "-u", "origin", branch)
+	cmd.Dir = targetDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		fmt.Printf("  Branch created and committed. Push failed: %s\n", string(out))
+		fmt.Println("  Push manually: git push origin", branch)
+		return nil
+	}
+
+	fmt.Printf("  Branch '%s' pushed to origin\n", branch)
+	fmt.Println("  Create PR on GitHub: https://github.com/pull/new/", branch)
+	return nil
+}
+
+func createGitHubPR(owner, repo, branch, token string, depCount int, targetDir string) error {
+	// First do local git operations
+	if err := createLocalPR(targetDir, branch, depCount); err != nil {
+		return err
+	}
+
+	// Get default branch
+	defaultBranch := "main"
+	cmd := exec.Command("git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+	cmd.Dir = targetDir
+	if out, err := cmd.Output(); err == nil {
+		defaultBranch = strings.TrimPrefix(strings.TrimSpace(string(out)), "origin/")
+	}
+
+	// Create PR via GitHub API
+	body := fmt.Sprintf("## Inline Dependencies\n\nEliminated supply chain risk by inlining **%d dependencies** with [Undependent](https://undependent.dev).\n\n- No external registries\n- No upstream compromise possible\n- Full license tracking\n- Integrity verification\n\nRun `undependent verify` to confirm integrity.", depCount)
+
+	prReq := map[string]interface{}{
+		"title": fmt.Sprintf("Inline %d dependencies with undependent", depCount),
+		"body":  body,
+		"head":  branch,
+		"base":  defaultBranch,
+	}
+	prReqJSON, _ := json.Marshal(prReq)
+
+	req, err := http.NewRequest("POST",
+		fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls", owner, repo),
+		strings.NewReader(string(prReqJSON)))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("GitHub API %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		HTMLURL string `json:"html_url"`
+	}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if result.HTMLURL != "" {
+		fmt.Printf("  PR created: %s\n", result.HTMLURL)
+	}
+
+	return nil
+}
+
+func parseGitHubRepo(remoteURL, prRepo string) (string, string) {
+	repoSource := remoteURL
+	if prRepo != "" {
+		repoSource = prRepo
+	}
+
+	// Handle SSH format: git@github.com:owner/repo.git
+	if strings.Contains(repoSource, "github.com:") {
+		parts := strings.SplitN(repoSource, ":", 2)
+		if len(parts) == 2 {
+			path := strings.TrimSuffix(parts[1], ".git")
+			parts2 := strings.SplitN(path, "/", 2)
+			if len(parts2) == 2 {
+				return parts2[0], parts2[1]
+			}
+		}
+	}
+
+	// Handle HTTPS format: https://github.com/owner/repo.git
+	repoSource = strings.TrimPrefix(repoSource, "https://")
+	repoSource = strings.TrimPrefix(repoSource, "http://")
+	repoSource = strings.TrimPrefix(repoSource, "github.com/")
+	repoSource = strings.TrimSuffix(repoSource, ".git")
+	parts := strings.SplitN(repoSource, "/", 2)
+	if len(parts) == 2 && parts[0] == "github.com" {
+		return "", parts[1] // Shouldn't happen after trim
+	}
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+
+	return "", ""
 }
