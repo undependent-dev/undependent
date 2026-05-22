@@ -76,7 +76,7 @@ func (a *Analyzer) Scan() ([]*SymbolUsage, error) {
 		if info.IsDir() {
 			if name == "vendor" || name == ".git" || name == "node_modules" ||
 				strings.HasPrefix(name, "internal/absorbed") ||
-				strings.HasPrefix(name, "undep") {
+				name == "undep" {
 				return filepath.SkipDir
 			}
 			return nil

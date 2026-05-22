@@ -230,7 +230,7 @@ func cmdScan(args []string) error {
 		if vv, ok := resolver.AllModules[modPath]; ok {
 			version = vv
 		}
-		results, err := osvClient.Query(context.Background(), modPath, version, "go")
+		results, err := osvClient.Query(context.Background(), "Go", modPath, version)
 		if err != nil {
 			fmt.Printf("  Warning: OSV query failed for %s: %v\n", modPath, err)
 			continue
